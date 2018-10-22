@@ -1,5 +1,6 @@
 #include "ngx_http_echo_module.h"
 #include <string.h>
+#include <stdlib.h>
 
 // 模块上下文
 static ngx_http_module_t ngx_http_echo_module_ctx = {
@@ -70,7 +71,7 @@ static char* ngx_http_echo_nginx(ngx_conf_t* cf, ngx_command_t* cmd, void* conf)
     return NGX_CONF_OK;
 }
 
-u_char str[] = "123";
+u_char str[] = "1234567890";
 // 指令对应的回调函数 应答客户端
 static ngx_int_t ngx_http_echo_handler(ngx_http_request_t* r) {
     ngx_int_t rc;
@@ -82,29 +83,31 @@ static ngx_int_t ngx_http_echo_handler(ngx_http_request_t* r) {
 }
 
 static void ngx_http_echo_real_handler(ngx_http_request_t* r) {
+    ngx_chain_t * bufs;
     ngx_buf_t* b;
     ngx_chain_t out;
     ngx_http_echo_loc_conf_t* cf;
     char* r_body;
-    int ret_len;
+    size_t len;
 
     cf = ngx_http_get_module_loc_conf(r, ngx_http_echo_module);
+    len = atoi((const char*)r->headers_in.content_length->value.data) + cf->pre_str.len;
+    r->headers_out.content_length_n = len;
+    r_body = ngx_pcalloc(r->pool, len);
+    len = cf->pre_str.len;
+    ngx_memcpy(r_body, cf->pre_str.data, len);
 
-    b = r->request_body->buf;
-    /*body_len = b->last - b->pos;*/
-    ret_len = cf->pre_str.len + 10;
-    r_body = (char*)ngx_pcalloc(r->pool, 16);
-    /*if (b == NULL) {*/
-        ret_len = 1;
-    /*} else {*/
-        /*ret_len = 2;*/
-    /*}*/
-    ngx_memcpy(r_body, b->pos, ret_len);
-    /*memcpy(str, cf->pre_str.data, cf->pre_str.len);*/
+    bufs = r->request_body->bufs;
+    while (bufs) {
+        b = bufs->buf;
+        ngx_memcpy(r_body + len, b->pos, b->last - b->pos);
+        len += b->last - b->pos;
+        bufs = bufs->next;
+    }
 
     b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
     b->pos = (u_char*)r_body;
-    b->last = b->pos + ret_len;
+    b->last = b->pos + len;
     b->memory = 1;
     b->last_buf = 1;
 
@@ -113,7 +116,6 @@ static void ngx_http_echo_real_handler(ngx_http_request_t* r) {
 
     r->headers_out.content_type.len = sizeof("text/plain") - 1;
     r->headers_out.content_type.data = (u_char*)"text/plain";
-    r->headers_out.content_length_n = ret_len;
     r->headers_out.status = NGX_HTTP_OK;
 
     ngx_http_send_header(r);
