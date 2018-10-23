@@ -43,10 +43,12 @@ ngx_module_t ngx_http_echo_module = {
 // 配置struct的创建函数
 static void* ngx_http_echo_create_loc_conf(ngx_conf_t* cf) {
     ngx_http_echo_loc_conf_t* conf;
+
     conf = ngx_pcalloc(cf->pool, sizeof(ngx_http_echo_loc_conf_t));
     if (conf == NULL) {
         return NGX_CONF_ERROR;
     }
+
     conf->pre_str.len = 0;
     conf->pre_str.data = NULL;
     return conf;
@@ -96,36 +98,43 @@ static void ngx_http_echo_real_handler(ngx_http_request_t* r) {
     ngx_chain_t out;
     ngx_http_echo_loc_conf_t* cf;
     char* r_body;
-    size_t len;
+    size_t len, tmp_len;
 
     // 获取保存配置结构的指针
     cf = ngx_http_get_module_loc_conf(r, ngx_http_echo_module);
+
     // 响应报文长度 = 请求体报文长度 + 前缀字符串长度
-    len = atoi((const char*)r->headers_in.content_length->value.data) + cf->pre_str.len;
-    // 设置content_lenth字段
-    r->headers_out.content_length_n = len;
+    // 如果没有传递body长度 跳过
+    if (r->headers_in.content_length != NULL) {
+        len = atoi((const char*)r->headers_in.content_length->value.data) + cf->pre_str.len;
+    } else {
+        len = cf->pre_str.len;
+    }
+
     // 申请响应正文内存
     r_body = ngx_pcalloc(r->pool, len);
     if (r_body == NULL) {
-
+        goto err;
     }
 
     // 先把前缀字符串写进去
-    len = cf->pre_str.len;
-    ngx_memcpy(r_body, cf->pre_str.data, len);
+    tmp_len = cf->pre_str.len;
+    ngx_memcpy(r_body, cf->pre_str.data, tmp_len);
     // 把请求正文写进去
-    bufs = r->request_body->bufs;
-    while (bufs) {
-        b = bufs->buf;
-        ngx_memcpy(r_body + len, b->pos, b->last - b->pos);
-        len += b->last - b->pos;
-        bufs = bufs->next;
+    if (len > tmp_len) {
+        bufs = r->request_body->bufs;
+        while (bufs) {
+            b = bufs->buf;
+            ngx_memcpy(r_body + tmp_len, b->pos, b->last - b->pos);
+            tmp_len += b->last - b->pos;
+            bufs = bufs->next;
+        }
     }
 
     // 申请buf 并设置数据
     b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
     if (b == NULL) {
-
+        goto err;
     }
     b->pos = (u_char*)r_body;
     b->last = b->pos + len;
@@ -137,12 +146,21 @@ static void ngx_http_echo_real_handler(ngx_http_request_t* r) {
     out.next = NULL;
 
     // 设置请求头
+    r->headers_out.content_length_n = len;
+    r->headers_out.status = NGX_HTTP_OK;
+    goto final;
+
+err:
+    // 设置带错误信息的chain_buf_t
+    set_err_chain(out);
+    r->headers_out.content_length_n = sizeof(err_str) - 1;
+    r->headers_out.status = NGX_HTTP_INTERNAL_SERVER_ERROR;
+    goto final;
+
+final:
     r->headers_out.content_type.len = sizeof("text/plain") - 1;
     r->headers_out.content_type.data = (u_char*)"text/plain";
-    r->headers_out.status = NGX_HTTP_OK;
-
     ngx_http_send_header(r);
     ngx_http_output_filter(r, &out);
-
 }
 

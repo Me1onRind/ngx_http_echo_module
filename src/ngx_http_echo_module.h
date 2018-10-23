@@ -3,8 +3,19 @@
 #include <ngx_http.h>
 
 typedef struct {
-    ngx_str_t pre_str;
+    ngx_str_t  pre_str;
 } ngx_http_echo_loc_conf_t;
+
+u_char err_str[] = "Server Error";
+ngx_buf_t err_buf;
+
+#define set_err_chain(out) \
+    err_buf.pos = err_str; \
+    err_buf.last = err_buf.pos + sizeof(err_str) - 1; \
+    err_buf.last_buf = 1; \
+    err_buf.memory = 1; \
+    out.buf = &err_buf; \
+    out.next = NULL; \
 
 /**
  * 创建保存配置的struct
@@ -26,13 +37,13 @@ static char* ngx_http_echo_merge_loc_conf(ngx_conf_t* cf, void* parent, void* ch
  */
 static char* ngx_http_echo_nginx(ngx_conf_t* cf, ngx_command_t* cmd, void* conf);
 /**
- * r http请求的strcut 
+ * r http请求的strcut
  */
 static ngx_int_t ngx_http_echo_handler(ngx_http_request_t* r);
 /**
  * 真正发送响应头和响应体
  * 使用这个函数是因为解析请求头是同步过程, 解析请求体是异步
  * 所以需要实现一个回调函数
- * r http请求的strcut 
+ * r http请求的strcut
  */
-static ngx_int_t ngx_http_echo_real_handler(ngx_http_request_t* r);
+static void ngx_http_echo_real_handler(ngx_http_request_t* r);
