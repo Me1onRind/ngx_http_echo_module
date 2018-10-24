@@ -6,17 +6,6 @@ typedef struct {
     ngx_str_t  pre_str;
 } ngx_http_echo_loc_conf_t;
 
-u_char err_str[] = "Server Error";
-ngx_buf_t err_buf;
-
-#define set_err_chain(out) \
-    err_buf.pos = err_str; \
-    err_buf.last = err_buf.pos + sizeof(err_str) - 1; \
-    err_buf.last_buf = 1; \
-    err_buf.memory = 1; \
-    out.buf = &err_buf; \
-    out.next = NULL; \
-
 /**
  * 创建保存配置的struct
  * cf 保存从配置文件读取到的原始字符串以及相关的一些信息

@@ -114,7 +114,8 @@ static void ngx_http_echo_real_handler(ngx_http_request_t* r) {
     // 申请响应正文内存
     r_body = ngx_pcalloc(r->pool, len);
     if (r_body == NULL) {
-        goto err;
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_pcalloc return null");
+        return;
     }
 
     // 先把前缀字符串写进去
@@ -134,7 +135,8 @@ static void ngx_http_echo_real_handler(ngx_http_request_t* r) {
     // 申请buf 并设置数据
     b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
     if (b == NULL) {
-        goto err;
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "ngx_pcalloc return null");
+        return;
     }
     b->pos = (u_char*)r_body;
     b->last = b->pos + len;
@@ -148,18 +150,10 @@ static void ngx_http_echo_real_handler(ngx_http_request_t* r) {
     // 设置请求头
     r->headers_out.content_length_n = len;
     r->headers_out.status = NGX_HTTP_OK;
-    goto final;
-
-err:
-    // 设置带错误信息的chain_buf_t
-    set_err_chain(out);
-    r->headers_out.content_length_n = sizeof(err_str) - 1;
-    r->headers_out.status = NGX_HTTP_INTERNAL_SERVER_ERROR;
-    goto final;
-
-final:
     r->headers_out.content_type.len = sizeof("text/plain") - 1;
     r->headers_out.content_type.data = (u_char*)"text/plain";
+
+    // 发送响应头和响应正文
     ngx_http_send_header(r);
     ngx_http_output_filter(r, &out);
 }
